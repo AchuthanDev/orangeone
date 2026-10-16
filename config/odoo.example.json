@@ -1,0 +1,5 @@
+{
+  "ODOO_BASE_URL": "https://your-odoo.example",
+  "ODOO_CONNECT_TIMEOUT_MS": 15000,
+  "ODOO_RESPONSE_TIMEOUT_MS": 20000
+}

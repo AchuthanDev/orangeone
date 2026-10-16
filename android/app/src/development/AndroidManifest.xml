@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- HTTP POS support is shared by all flavors in the main manifest. -->
+    <application android:usesCleartextTraffic="true" />
+</manifest>

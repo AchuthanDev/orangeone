@@ -1,0 +1,40 @@
+name: OrangeONE Unsigned iOS
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ios:
+    # The template's Icon Composer assets require Xcode 26 or newer.
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [development, staging, production]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report Apple build tools
+        run: |
+          xcodebuild -version
+          swift --version
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build ios --release --no-codesign --flavor ${{ matrix.flavor }} --target lib/main_${{ matrix.flavor }}.dart
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-${{ matrix.flavor }}
+          path: build/ios/iphoneos/*.app
+          if-no-files-found: error
+          retention-days: 7
+

@@ -1,0 +1,211 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_router/go_router.dart';
+import 'package:orange_one/features/home/presentation/providers/product_providers.dart';
+import 'package:orange_one/features/home/presentation/widgets/product_camera.dart';
+import 'package:orange_one/features/home/presentation/widgets/product_result_panel.dart';
+import 'package:orange_one/shared/theme/orange_theme.dart';
+import 'package:orange_one/shared/widgets/scan_frame.dart';
+
+class ProductScannerPage extends ConsumerStatefulWidget {
+  const new({required this.onLookup, super.key});
+  final Future<void> Function(String barcode, {required bool found}) onLookup;
+
+  @override
+  ConsumerState<ProductScannerPage> createState() => _ProductScannerPageState();
+}
+
+class _ProductScannerPageState extends ConsumerState<ProductScannerPage> {
+  final _scroll = ScrollController();
+  var _cameraGeneration = 0;
+  String _status = 'Opening camera…';
+  bool _navigating = false;
+
+  Future<void> _openResult(ProductLookup result) async {
+    if (_navigating || !mounted) return;
+    _navigating = true;
+    try {
+      await widget.onLookup(result.barcode, found: result.product != null);
+    } finally {
+      if (mounted) {
+        _navigating = false;
+        _scanAgain();
+      }
+    }
+  }
+
+  void _scanAgain() {
+    ref.read(productLookupControllerProvider.notifier).scanAgain();
+    setState(() {
+      _cameraGeneration++;
+      _status = 'Opening camera…';
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(productLookupControllerProvider);
+    ref.listen(productLookupControllerProvider, (previous, next) {
+      if (!next.isLoading && !next.hasError && next.value != null) {
+        unawaited(_openResult(next.value!));
+      }
+    });
+    final controller = ref.read(productLookupControllerProvider.notifier);
+    final scanning =
+        !state.isLoading &&
+        !state.hasError &&
+        state.value == null &&
+        !_navigating;
+    return Scaffold(
+      backgroundColor: OrangeTheme.camera,
+      body: LayoutBuilder(
+        builder: (context, viewport) {
+          if (viewport.maxWidth < 64 || viewport.maxHeight <= 0) {
+            return const SizedBox.shrink();
+          }
+          final frameWidth = math.min<double>(400, viewport.maxWidth - 64);
+          return CustomScrollView(
+            controller: _scroll,
+            slivers: [
+              SliverToBoxAdapter(
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: OrangeTheme.scannerGradient,
+                  ),
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            tooltip: 'Back to home',
+                            onPressed: () => context.canPop()
+                                ? context.pop(false)
+                                : context.goNamed('home'),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.white.withValues(
+                                alpha: .2,
+                              ),
+                              fixedSize: const Size(48, 48),
+                            ),
+                            icon: SvgPicture.asset(
+                              'assets/icons/arrow_left.svg',
+                              width: 20,
+                              height: 20,
+                              colorFilter: const ColorFilter.mode(
+                                Colors.white,
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                          ),
+                          const Expanded(
+                            child: Text(
+                              'Scan Barcode',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 48),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  children: [
+                    const Spacer(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: frameWidth,
+                            height: frameWidth * 190 / 326,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (scanning)
+                                  KeyedSubtree(
+                                    key: ValueKey(_cameraGeneration),
+                                    child:
+                                        ref.watch(productCameraBuilderProvider)(
+                                          context,
+                                          (code) =>
+                                              unawaited(controller.scan(code)),
+                                          (status) {
+                                            if (mounted) {
+                                              setState(() => _status = status);
+                                            }
+                                          },
+                                        ),
+                                  ),
+                                const IgnorePointer(
+                                  child: ScanFrame(
+                                    color: OrangeTheme.scannerAccent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              state.isLoading
+                                  ? 'Looking up product…'
+                                  : scanning
+                                  ? _status
+                                  : 'Scan paused · Review the result below',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    ProductResultPanel(
+                      state: state,
+                      onScanAgain: _scanAgain,
+                      onRetry: () => unawaited(controller.retry()),
+                      onAddProduct: (barcode) => unawaited(
+                        context.pushNamed<void>(
+                          'addProduct',
+                          queryParameters: {'barcode': barcode},
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
