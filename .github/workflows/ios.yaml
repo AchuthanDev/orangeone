@@ -31,7 +31,7 @@ jobs:
           cache: true
       - run: flutter pub get --enforce-lockfile
       - run: flutter build ios --release --no-codesign --flavor ${{ matrix.flavor }} --target lib/main_${{ matrix.flavor }}.dart
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ios-unsigned-${{ matrix.flavor }}
           path: build/ios/iphoneos/*.app
