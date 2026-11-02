@@ -19,7 +19,7 @@ jobs:
       matrix:
         flavor: [development, staging, production]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Report Apple build tools
         run: |
           xcodebuild -version
